@@ -24,6 +24,70 @@ app/
   src-tauri/nsis/      Windows 安装器钩子
 ```
 
+## 使用教程
+
+### 1. 安装
+
+从 GitHub Release 下载 Windows 安装包，或在本地构建后运行生成的安装程序：
+
+```text
+app/src-tauri/target/release/bundle/nsis/Codex Quota Widget_0.1.0_x64-setup.exe
+```
+
+覆盖安装时，安装器会尝试自动结束正在运行的旧进程，然后安装新版本。
+
+### 2. 首次启动
+
+启动后应用会常驻系统托盘：
+
+- 托盘图标会直接显示 5 小时额度余量。
+- 鼠标悬停托盘图标会显示简略额度信息。
+- 点击托盘图标可以打开或隐藏详情卡片。
+- 在托盘菜单中可以执行打开详情、立即刷新、打开设置和退出程序。
+
+应用默认会优先读取本机 Edge 中的 `chatgpt.com` 登录态。如果读取失败，或 ChatGPT 返回未登录状态，可以在设置里临时粘贴 Cookie Header。
+
+### 3. 配置 Cookie Header
+
+1. 在 Edge 中登录 ChatGPT。
+2. 打开额度页面：
+
+```text
+https://chatgpt.com/codex/cloud/settings/analytics#usage
+```
+
+3. 使用F12打开 DevTools，进入 Network 面板。
+4. 找到这个请求：
+
+```text
+https://chatgpt.com/backend-api/wham/usage
+```
+
+5. 复制 Request Headers 里的完整 `Cookie` 值。
+6. 回到应用设置页，粘贴到“临时 Cookie Header”，点击应用并刷新。
+
+临时 Cookie Header 只保存在本次程序内存中，不会写入磁盘。重启后如果自动读取 Edge 登录态失败，需要重新粘贴。
+
+### 4. 刷新与显示
+
+- 点击详情卡片右上角“刷新”可以手动刷新。
+- 设置页可以调整自动刷新间隔，默认每 5 分钟刷新一次。
+- 5 小时额度的重置时间显示为具体时间。
+- 每周额度的重置时间显示为具体日期。
+- 如果当前网络失败但本地有缓存，界面会继续显示上一次可用数据，并标记数据来源为缓存。
+
+### 5. 诊断与日志
+
+设置页提供连接诊断，用来检查系统代理、本地代理端口、ChatGPT session、analytics 页面和 `wham/usage` 接口是否可达。
+
+日志文件位于：
+
+```text
+C:\Users\<你的用户名>\AppData\Local\com.codex.quota.widget\codex-quota.log
+```
+
+日志会脱敏 Cookie、Authorization、Bearer 等敏感字段。提交 issue 或排查问题时，可以优先查看日志里的最近一次刷新记录和错误摘要。
+
 ## 本地开发
 
 ```powershell
