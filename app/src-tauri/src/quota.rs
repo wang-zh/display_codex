@@ -589,7 +589,7 @@ fn civil_from_days(days_since_unix_epoch: i64) -> (i32, u16, u16) {
 }
 
 fn normalize_percent_value(value: f64) -> Option<u8> {
-    let percent = if (0.0..=1.0).contains(&value) {
+    let percent = if (0.0..1.0).contains(&value) {
         value * 100.0
     } else {
         value

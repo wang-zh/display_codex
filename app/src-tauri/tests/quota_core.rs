@@ -193,6 +193,31 @@ fn ignores_reset_countdown_when_calculating_wham_remaining_percent() {
 }
 
 #[test]
+fn treats_one_used_percent_as_one_percent_not_fractional_full_usage() {
+    let text = r#"
+{
+  "rate_limit": {
+    "primary_window": {
+      "used_percent": 1,
+      "reset_after_seconds": 17067
+    },
+    "secondary_window": {
+      "used_percent": 1,
+      "reset_after_seconds": 553953
+    }
+  }
+}
+"#;
+
+    let state = parse_analytics_text(text).expect("expected wham usage JSON to parse");
+
+    assert_eq!(state.entries[0].kind, QuotaKind::FiveHour);
+    assert_eq!(state.entries[0].remaining_percent, 99);
+    assert_eq!(state.entries[1].kind, QuotaKind::Weekly);
+    assert_eq!(state.entries[1].remaining_percent, 99);
+}
+
+#[test]
 fn retry_delay_caps_after_repeated_failures() {
     assert_eq!(next_retry_delay_minutes(0), 5);
     assert_eq!(next_retry_delay_minutes(1), 10);

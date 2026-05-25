@@ -28,10 +28,23 @@ app/
 
 ### 1. 安装
 
-从 GitHub Release 下载 Windows 安装包，或在本地构建后运行生成的安装程序：
+从 GitHub Releases 下载最新 Windows 安装包：
 
 ```text
-app/src-tauri/target/release/bundle/nsis/Codex Quota Widget_0.1.0_x64-setup.exe
+https://github.com/wang-zh/display_codex/releases/latest
+```
+
+推荐下载并运行 NSIS 安装包：
+
+```text
+Codex.Quota.Widget_*_x64-setup.exe
+```
+
+如果是本地构建，安装包位于：
+
+```text
+app/src-tauri/target/release/bundle/nsis/*.exe
+app/src-tauri/target/release/bundle/msi/*.msi
 ```
 
 覆盖安装时，安装器会尝试自动结束正在运行的旧进程，然后安装新版本。
@@ -106,7 +119,41 @@ npm run tauri -- build
 生成文件位于：
 
 ```text
-app/src-tauri/target/release/bundle/
+app/src-tauri/target/release/bundle/nsis/*.exe
+app/src-tauri/target/release/bundle/msi/*.msi
+```
+
+## 发布 GitHub Release
+
+推荐使用 GitHub CLI 发布安装包。第一次使用前先登录：
+
+```powershell
+gh auth login
+```
+
+构建并确认安装包存在：
+
+```powershell
+cd app
+npm run tauri -- build
+cd ..
+```
+
+发布前确认代码已经提交并推送，版本号和 Release 标签一致。发布当前版本，例如 `v0.1.0`：
+
+```powershell
+gh release create v0.1.0 `
+  "app/src-tauri/target/release/bundle/nsis/Codex Quota Widget_0.1.0_x64-setup.exe" `
+  "app/src-tauri/target/release/bundle/msi/Codex Quota Widget_0.1.0_x64_en-US.msi" `
+  --repo wang-zh/display_codex `
+  --title "Codex Quota Widget v0.1.0" `
+  --notes "Windows 托盘版 Codex 额度显示工具。"
+```
+
+如果不想使用命令行，也可以在 GitHub 网页中进入：
+
+```text
+https://github.com/wang-zh/display_codex/releases/new
 ```
 
 ## 验证命令
