@@ -1,0 +1,26 @@
+# Local workflow/runtime state
+.omx/
+.superpowers/
+docs/superpowers/
+
+# Secrets and copied browser/devtools captures
+.env
+.env.*
+!.env.example
+*.devtools
+analytics.devtools
+
+# Logs, caches, and temporary files
+*.log
+*.tmp
+*.bak
+*.cache
+.DS_Store
+Thumbs.db
+
+# Frontend dependencies and build output
+app/node_modules/
+app/dist/
+
+# Rust/Tauri build output and bundles
+app/src-tauri/target/

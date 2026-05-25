@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Codex 额度</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <main class="quota-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Codex 余量</p>
+          <h1>额度状态</h1>
+        </div>
+        <div class="header-actions">
+          <button id="settings-button" class="icon-button" type="button" aria-label="打开设置">设置</button>
+          <button id="refresh-button" class="refresh-button" type="button" aria-label="刷新额度">
+            <span aria-hidden="true">刷新</span>
+          </button>
+        </div>
+      </header>
+
+      <div id="status-banner" class="status-banner" hidden></div>
+
+      <div id="quota-cards" class="quota-cards"></div>
+
+      <section id="settings-panel" class="settings-panel" hidden>
+        <div class="settings-panel__header">
+          <strong>设置与诊断</strong>
+          <button id="close-settings-button" class="icon-button" type="button">关闭</button>
+        </div>
+
+        <label class="setting-row">
+          <span>
+            <strong>自动刷新间隔</strong>
+            <small>手动刷新成功后会重置倒计时</small>
+          </span>
+          <select id="refresh-interval-select">
+            <option value="1">1 分钟</option>
+            <option value="5">5 分钟</option>
+            <option value="10">10 分钟</option>
+            <option value="15">15 分钟</option>
+            <option value="30">30 分钟</option>
+          </select>
+        </label>
+
+        <label class="credential-block">
+          <span>
+            <strong>临时 Cookie Header</strong>
+            <small>登录失败或 Edge Cookie 被锁定时使用。只保存在本次程序内存里，不写入磁盘。</small>
+          </span>
+          <textarea
+            id="cookie-header-input"
+            spellcheck="false"
+            placeholder="粘贴请求头里的 Cookie: 后面的内容"
+          ></textarea>
+        </label>
+        <div class="credential-actions">
+          <button id="open-chatgpt-button" class="secondary-button" type="button">打开 ChatGPT 页面</button>
+          <button id="apply-cookie-header-button" class="secondary-button" type="button">应用并刷新</button>
+          <button id="clear-cookie-header-button" class="secondary-button" type="button">清除临时 Cookie</button>
+        </div>
+        <p id="credential-hint" class="credential-hint">
+          页面打开后确认已登录，再从 analytics 页面的 wham/usage 请求复制 Cookie Header。
+        </p>
+
+        <div class="diagnostics">
+          <div class="diagnostics__header">
+            <strong>连接诊断</strong>
+            <button id="check-connection-button" class="secondary-button" type="button">检测连接</button>
+          </div>
+          <div>
+            <span class="meta-label">连接摘要</span>
+            <span id="diagnostic-network-summary">尚未检测</span>
+          </div>
+          <div>
+            <span class="meta-label">系统代理</span>
+            <span id="diagnostic-proxy">尚未检测</span>
+          </div>
+          <div>
+            <span class="meta-label">接口可达</span>
+            <span id="diagnostic-endpoints">尚未检测</span>
+          </div>
+          <div>
+            <span class="meta-label">数据来源</span>
+            <span id="diagnostic-source">cache</span>
+          </div>
+          <div>
+            <span class="meta-label">状态</span>
+            <span id="diagnostic-status">idle</span>
+          </div>
+          <div>
+            <span class="meta-label">错误摘要</span>
+            <span id="diagnostic-error">无</span>
+          </div>
+          <div>
+            <span class="meta-label">日志文件</span>
+            <span id="diagnostic-log-path">启动后生成</span>
+          </div>
+        </div>
+      </section>
+
+      <footer class="quota-footer">
+        <div>
+          <span class="meta-label">上次刷新</span>
+          <span id="last-refresh">尚未成功刷新</span>
+        </div>
+        <div>
+          <span class="meta-label">下次自动刷新</span>
+          <span id="next-refresh">5 分钟后</span>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>
