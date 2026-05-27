@@ -36,8 +36,8 @@ pub struct AnalyticsPage {
     pub diagnostic_summary: String,
 }
 
-pub fn fetch_analytics_page(cookie_header: &str) -> Result<AnalyticsPage, AnalyticsError> {
-    let client = reqwest::blocking::Client::builder()
+fn build_chatgpt_client() -> Result<reqwest::blocking::Client, AnalyticsError> {
+    reqwest::blocking::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0")
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(30))
@@ -47,13 +47,29 @@ pub fn fetch_analytics_page(cookie_header: &str) -> Result<AnalyticsPage, Analyt
                 "failed to build HTTP client: {}",
                 describe_error_chain(&error)
             ))
-        })?;
+        })
+}
+
+pub fn fetch_analytics_page(cookie_header: &str) -> Result<AnalyticsPage, AnalyticsError> {
+    let client = build_chatgpt_client()?;
     let access_token = fetch_access_token(&client, cookie_header)?;
     warm_up_accessible_links(&client, cookie_header, &access_token);
-    let response = client
+    fetch_usage_with_client(&client, &access_token, Some(cookie_header))
+}
+
+pub fn fetch_usage_with_access_token(access_token: &str) -> Result<AnalyticsPage, AnalyticsError> {
+    let client = build_chatgpt_client()?;
+    fetch_usage_with_client(&client, access_token, None)
+}
+
+fn fetch_usage_with_client(
+    client: &reqwest::blocking::Client,
+    access_token: &str,
+    cookie_header: Option<&str>,
+) -> Result<AnalyticsPage, AnalyticsError> {
+    let mut request = client
         .get(USAGE_URL)
-        .header(reqwest::header::COOKIE, cookie_header)
-        .bearer_auth(&access_token)
+        .bearer_auth(access_token)
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::ACCEPT_LANGUAGE, "zh-CN,zh;q=0.9,en;q=0.7")
         .header(reqwest::header::CACHE_CONTROL, "no-cache")
@@ -66,8 +82,18 @@ pub fn fetch_analytics_page(cookie_header: &str) -> Result<AnalyticsPage, Analyt
         .header("sec-ch-ua-platform", r#""Windows""#)
         .header("sec-fetch-dest", "empty")
         .header("sec-fetch-mode", "cors")
-        .header("sec-fetch-site", "same-origin")
-        .send()
+        .header("sec-fetch-site", "same-origin");
+    if let Some(cookie_header) = cookie_header {
+        request = request.header(reqwest::header::COOKIE, cookie_header);
+    }
+
+    let response = client
+        .execute(request.build().map_err(|error| {
+            AnalyticsError::Network(format!(
+                "usage request build failed for {USAGE_URL}: {}",
+                describe_error_chain(&error)
+            ))
+        })?)
         .map_err(|error| network_request_error("usage request", USAGE_URL, error))?;
 
     let status = response.status().as_u16();
@@ -362,7 +388,7 @@ fn fetch_access_token_from_analytics_page(
 }
 
 fn login_required_message() -> String {
-    "ChatGPT 登录态未被接受。请在 Edge 打开 ChatGPT analytics 页面确认已登录，或在设置里粘贴同一会话的 Cookie Header。"
+    "ChatGPT 登录态未被接受。请确认本地 Codex 已通过 codex login 使用 ChatGPT 登录，或在设置里粘贴同一会话的 Cookie Header。"
         .to_owned()
 }
 
@@ -405,7 +431,7 @@ fn find_json_string_value(text: &str, key: &str) -> Option<String> {
         }
     }
 
-    (!value.trim().is_empty()).then(|| value)
+    (!value.trim().is_empty()).then_some(value)
 }
 
 fn warm_up_accessible_links(

@@ -1,6 +1,7 @@
 # Local workflow/runtime state
 .omx/
 .superpowers/
+.codegraph/
 docs/superpowers/
 
 # Secrets and copied browser/devtools captures

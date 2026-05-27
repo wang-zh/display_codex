@@ -268,7 +268,7 @@ fn find_json_quota_entry(
         missing_reset: false,
     };
 
-    if let Some(entry) = visit_json_for_quota(value, &mut path, kind, error_name, &mut search) {
+    if let Some(entry) = visit_json_for_quota(value, &mut path, kind, &mut search) {
         return Ok(entry);
     }
 
@@ -286,7 +286,6 @@ fn visit_json_for_quota(
     value: &Value,
     path: &mut Vec<String>,
     kind: QuotaKind,
-    error_name: &'static str,
     search: &mut JsonQuotaSearch,
 ) -> Option<QuotaEntry> {
     match value {
@@ -311,7 +310,7 @@ fn visit_json_for_quota(
 
             for (key, child) in map {
                 path.push(key.to_owned());
-                if let Some(entry) = visit_json_for_quota(child, path, kind, error_name, search) {
+                if let Some(entry) = visit_json_for_quota(child, path, kind, search) {
                     return Some(entry);
                 }
                 path.pop();
@@ -320,7 +319,7 @@ fn visit_json_for_quota(
         }
         Value::Array(items) => items
             .iter()
-            .find_map(|item| visit_json_for_quota(item, path, kind, error_name, search)),
+            .find_map(|item| visit_json_for_quota(item, path, kind, search)),
         _ => None,
     }
 }

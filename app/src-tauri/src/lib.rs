@@ -1,5 +1,6 @@
 pub mod analytics;
 pub mod app_log;
+pub mod codex_credentials;
 pub mod edge_credentials;
 pub mod network_diagnostics;
 pub mod quota;
@@ -7,8 +8,11 @@ pub mod quota_cache;
 
 use std::{path::PathBuf, sync::Mutex};
 
-use analytics::{fetch_analytics_page, AnalyticsError};
+use analytics::{
+    fetch_analytics_page, fetch_usage_with_access_token, AnalyticsError, AnalyticsPage,
+};
 use app_log::append_log_line;
+use codex_credentials::{load_codex_access_token, user_facing_codex_credential_error};
 use edge_credentials::{load_edge_cookie_header, user_facing_credential_error};
 use network_diagnostics::{collect_connection_diagnostics, ConnectionDiagnostics};
 use quota::{
@@ -50,6 +54,13 @@ struct QuotaRuntime {
     cache_path: Option<PathBuf>,
     log_path: Option<PathBuf>,
     cookie_header_override: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CredentialAttemptKind {
+    CodexAuth,
+    TemporaryOverride,
+    Edge,
 }
 
 #[tauri::command]
@@ -105,55 +116,7 @@ fn refresh_quota(
     }
 
     log_runtime_event(log_path.as_ref(), "refresh_start", "source=live");
-    let credential_result = match cookie_header_override {
-        Some(cookie_header) => {
-            log_runtime_event(
-                log_path.as_ref(),
-                "credential_ready",
-                "source=temporary_override",
-            );
-            Ok(cookie_header)
-        }
-        None => match load_edge_cookie_header() {
-            Ok(cookie_header) => {
-                log_runtime_event(log_path.as_ref(), "credential_ready", "source=edge");
-                Ok(cookie_header)
-            }
-            Err(error) => {
-                let summary = user_facing_credential_error(&error);
-                log_runtime_event(
-                    log_path.as_ref(),
-                    "credential_error",
-                    format!("source=edge error={summary}"),
-                );
-                Err((QuotaStatus::LoginRequired, summary))
-            }
-        },
-    };
-
-    let result =
-        credential_result.and_then(|cookie_header| match fetch_analytics_page(&cookie_header) {
-            Ok(page) => {
-                log_runtime_event(
-                    log_path.as_ref(),
-                    "analytics_fetch_ok",
-                    &page.diagnostic_summary,
-                );
-                parse_quota_text(&page.body, Some(page.diagnostic_summary))
-            }
-            Err(error) => {
-                let (status, message) = match error {
-                    AnalyticsError::LoginRequired(message) => (QuotaStatus::LoginRequired, message),
-                    AnalyticsError::Network(message) => (QuotaStatus::NetworkError, message),
-                };
-                log_runtime_event(
-                    log_path.as_ref(),
-                    "analytics_fetch_error",
-                    format!("status={status:?} error={message}"),
-                );
-                Err((status, message))
-            }
-        });
+    let result = fetch_live_quota(cookie_header_override, log_path.as_ref());
 
     let quota_state = finish_refresh(state, result);
     log_runtime_event(
@@ -163,6 +126,138 @@ fn refresh_quota(
     );
     update_tray_presentation(&app, &quota_state);
     quota_state
+}
+
+fn fetch_live_quota(
+    cookie_header_override: Option<String>,
+    log_path: Option<&PathBuf>,
+) -> Result<QuotaState, (QuotaStatus, String)> {
+    let mut last_error = None;
+    for attempt in credential_attempt_order(cookie_header_override.is_some()) {
+        let result = match attempt {
+            CredentialAttemptKind::CodexAuth => fetch_with_codex_auth(log_path),
+            CredentialAttemptKind::TemporaryOverride => cookie_header_override
+                .as_deref()
+                .map(|cookie_header| {
+                    fetch_with_cookie_source("temporary_override", cookie_header, log_path)
+                })
+                .unwrap_or_else(|| {
+                    Err((
+                        QuotaStatus::LoginRequired,
+                        "临时 Cookie Header 为空。".to_owned(),
+                    ))
+                }),
+            CredentialAttemptKind::Edge => match load_edge_cookie_header() {
+                Ok(cookie_header) => fetch_with_cookie_source("edge", &cookie_header, log_path),
+                Err(error) => {
+                    let summary = user_facing_credential_error(&error);
+                    log_runtime_event(
+                        log_path,
+                        "credential_error",
+                        format!("source=edge error={summary}"),
+                    );
+                    Err((QuotaStatus::LoginRequired, summary))
+                }
+            },
+        };
+
+        match result {
+            Ok(state) => return Ok(state),
+            Err(error) if should_try_next_credential(error.0) => last_error = Some(error),
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| {
+        (
+            QuotaStatus::LoginRequired,
+            "没有找到可用的 ChatGPT 登录态。".to_owned(),
+        )
+    }))
+}
+
+fn fetch_with_codex_auth(log_path: Option<&PathBuf>) -> Result<QuotaState, (QuotaStatus, String)> {
+    let access_token = match load_codex_access_token() {
+        Ok(access_token) => {
+            log_runtime_event(log_path, "credential_ready", "source=codex_auth");
+            access_token
+        }
+        Err(error) => {
+            let summary = user_facing_codex_credential_error(&error);
+            log_runtime_event(
+                log_path,
+                "credential_error",
+                format!("source=codex_auth error={summary}"),
+            );
+            return Err((QuotaStatus::LoginRequired, summary));
+        }
+    };
+
+    match fetch_usage_with_access_token(&access_token) {
+        Ok(page) => parse_page_from_source("codex_auth", page, log_path),
+        Err(error) => {
+            let (status, message) = analytics_error_to_quota_failure(error);
+            log_runtime_event(
+                log_path,
+                "analytics_fetch_error",
+                format!("source=codex_auth status={status:?} error={message}"),
+            );
+            Err((status, message))
+        }
+    }
+}
+
+fn fetch_with_cookie_source(
+    source: &str,
+    cookie_header: &str,
+    log_path: Option<&PathBuf>,
+) -> Result<QuotaState, (QuotaStatus, String)> {
+    log_runtime_event(log_path, "credential_ready", format!("source={source}"));
+    match fetch_analytics_page(cookie_header) {
+        Ok(page) => parse_page_from_source(source, page, log_path),
+        Err(error) => {
+            let (status, message) = analytics_error_to_quota_failure(error);
+            log_runtime_event(
+                log_path,
+                "analytics_fetch_error",
+                format!("source={source} status={status:?} error={message}"),
+            );
+            Err((status, message))
+        }
+    }
+}
+
+fn parse_page_from_source(
+    source: &str,
+    page: AnalyticsPage,
+    log_path: Option<&PathBuf>,
+) -> Result<QuotaState, (QuotaStatus, String)> {
+    log_runtime_event(
+        log_path,
+        "analytics_fetch_ok",
+        format!("source={source}; {}", page.diagnostic_summary),
+    );
+    parse_quota_text(&page.body, Some(page.diagnostic_summary))
+}
+
+fn analytics_error_to_quota_failure(error: AnalyticsError) -> (QuotaStatus, String) {
+    match error {
+        AnalyticsError::LoginRequired(message) => (QuotaStatus::LoginRequired, message),
+        AnalyticsError::Network(message) => (QuotaStatus::NetworkError, message),
+    }
+}
+
+fn credential_attempt_order(has_cookie_override: bool) -> Vec<CredentialAttemptKind> {
+    let mut attempts = vec![CredentialAttemptKind::CodexAuth];
+    if has_cookie_override {
+        attempts.push(CredentialAttemptKind::TemporaryOverride);
+    }
+    attempts.push(CredentialAttemptKind::Edge);
+    attempts
+}
+
+fn should_try_next_credential(status: QuotaStatus) -> bool {
+    status == QuotaStatus::LoginRequired
 }
 
 #[tauri::command]
@@ -776,5 +871,31 @@ mod tests {
             runtime_log_file_path(&runtime),
             Some(r"C:\Users\TR\AppData\Local\codex-quota.log".to_owned())
         );
+    }
+
+    #[test]
+    fn credential_attempt_order_prefers_codex_then_override_then_edge() {
+        assert_eq!(
+            credential_attempt_order(true),
+            vec![
+                CredentialAttemptKind::CodexAuth,
+                CredentialAttemptKind::TemporaryOverride,
+                CredentialAttemptKind::Edge,
+            ]
+        );
+        assert_eq!(
+            credential_attempt_order(false),
+            vec![
+                CredentialAttemptKind::CodexAuth,
+                CredentialAttemptKind::Edge
+            ]
+        );
+    }
+
+    #[test]
+    fn credential_fallback_only_continues_after_login_failure() {
+        assert!(should_try_next_credential(QuotaStatus::LoginRequired));
+        assert!(!should_try_next_credential(QuotaStatus::NetworkError));
+        assert!(!should_try_next_credential(QuotaStatus::ParseError));
     }
 }

@@ -50,7 +50,7 @@
         <label class="credential-block">
           <span>
             <strong>临时 Cookie Header</strong>
-            <small>登录失败或 Edge Cookie 被锁定时使用。只保存在本次程序内存里，不写入磁盘。</small>
+            <small>本地 Codex 登录态不可用、过期或 Edge Cookie 被锁定时使用。只保存在本次程序内存里，不写入磁盘。</small>
           </span>
           <textarea
             id="cookie-header-input"
@@ -64,7 +64,7 @@
           <button id="clear-cookie-header-button" class="secondary-button" type="button">清除临时 Cookie</button>
         </div>
         <p id="credential-hint" class="credential-hint">
-          页面打开后确认已登录，再从 analytics 页面的 wham/usage 请求复制 Cookie Header。
+          默认优先读取本机 Codex ChatGPT 登录态；如需兜底，打开页面后确认已登录，再从 analytics 页面的 wham/usage 请求复制 Cookie Header。
         </p>
 
         <div class="diagnostics">
